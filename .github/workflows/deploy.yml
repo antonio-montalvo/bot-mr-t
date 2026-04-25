@@ -64,3 +64,12 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/user/packages/container/bot-mr-t/visibility" \
             -d '{"visibility":"public"}' || true
+
+      - name: Trigger deploy pipeline
+        if: github.event_name == 'push'
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/antonio-montalvo/docker-trading-bot-environment/dispatches" \
+            -d '{"event_type":"deploy","client_payload":{"bot_tag":"develop","source":"bot-mr-t"}}'
