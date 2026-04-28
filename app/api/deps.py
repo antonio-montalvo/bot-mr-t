@@ -11,8 +11,6 @@ from app.api.config import (
     ALGORITHM,
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_EXPIRE_MINUTES,
-    ADMIN_USERNAME,
-    ADMIN_PASSWORD,
 )
 from app.auth import AlpacaAuth
 from app.broker import AlpacaBroker
@@ -95,10 +93,35 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def authenticate_user(username: str, password: str) -> Optional[str]:
-    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-        return username
-    return None
+def authenticate_user(email: str, password: str) -> Optional[dict]:
+    db = get_db()
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT id, email, password_hash, full_name, is_active FROM users WHERE email = %s", (email,))
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    user_id, user_email, password_hash, full_name, is_active = row
+    if not is_active:
+        return None
+    if not verify_password(password, password_hash):
+        return None
+    return {"id": str(user_id), "email": user_email, "full_name": full_name}
+
+
+def create_user(email: str, password: str, full_name: str = None) -> dict:
+    db = get_db()
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+    if cursor.fetchone():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El email ya está registrado")
+    hashed = get_password_hash(password)
+    cursor.execute(
+        "INSERT INTO users (email, password_hash, full_name) VALUES (%s, %s, %s) RETURNING id, email, full_name, is_active, created_at",
+        (email, hashed, full_name),
+    )
+    row = cursor.fetchone()
+    db.conn.commit()
+    return {"id": str(row[0]), "email": row[1], "full_name": row[2], "is_active": row[3], "created_at": row[4]}
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:

@@ -5,8 +5,22 @@ from datetime import datetime
 
 # ── Auth ─────────────────────────────────────────
 class LoginRequest(BaseModel):
-    username: str
+    email: str
     password: str
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = None
+
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    full_name: Optional[str] = None
+    is_active: bool = True
+    created_at: Optional[datetime] = None
 
 
 class TokenResponse(BaseModel):
