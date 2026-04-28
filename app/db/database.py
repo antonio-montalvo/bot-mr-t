@@ -35,33 +35,29 @@ class Database:
         self._create_tables()
 
     def _create_tables(self):
-        cursor = self.conn.cursor()
         if self._is_postgres:
+            ddl_path = Path(__file__).resolve().parent.parent.parent / "resources" / "ddl.sql"
+            if ddl_path.exists():
+                sql = ddl_path.read_text(encoding="utf-8")
+                cursor = self.conn.cursor()
+                cursor.execute(sql)
+                self.conn.commit()
+                logger.info("DDL ejecutado desde %s", ddl_path)
+            else:
+                logger.warning("Archivo DDL no encontrado: %s", ddl_path)
+        else:
+            cursor = self.conn.cursor()
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS trades (
-                    id SERIAL PRIMARY KEY,
-                    symbol VARCHAR(20) NOT NULL,
-                    side VARCHAR(10) NOT NULL,
-                    qty DOUBLE PRECISION NOT NULL,
-                    price DOUBLE PRECISION,
-                    order_id VARCHAR(100),
-                    status VARCHAR(20),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS strategies (
-                    id SERIAL PRIMARY KEY,
-                    name VARCHAR(100) NOT NULL,
-                    description TEXT,
-                    type VARCHAR(50) NOT NULL,
-                    parameters TEXT,
-                    is_active BOOLEAN DEFAULT FALSE,
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    full_name TEXT,
+                    is_active INTEGER DEFAULT 1,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-        else:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS trades (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,19 +70,7 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS strategies (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    description TEXT,
-                    type TEXT NOT NULL,
-                    parameters TEXT,
-                    is_active INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-        self.conn.commit()
+            self.conn.commit()
 
     def insert_trade(self, symbol: str, side: str, qty: float, price: float, order_id: str, status: str):
         cursor = self.conn.cursor()
