@@ -4,11 +4,13 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+def _get_database_url() -> str:
+    return os.getenv("DATABASE_URL")
 
 
 def _use_postgres() -> bool:
-    return DATABASE_URL is not None and DATABASE_URL.startswith("postgresql")
+    url = _get_database_url()
+    return url is not None and url.startswith("postgresql")
 
 
 class Database:
@@ -21,7 +23,7 @@ class Database:
     def connect(self):
         if self._is_postgres:
             import psycopg2
-            self.conn = psycopg2.connect(DATABASE_URL)
+            self.conn = psycopg2.connect(_get_database_url())
             logger.info("Conexión a PostgreSQL establecida.")
         else:
             import sqlite3
