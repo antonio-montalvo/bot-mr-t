@@ -22,40 +22,8 @@ from app.db import Database
 security = HTTPBearer()
 
 # ── Singletons ───────────────────────────────────
-_auth: Optional[AlpacaAuth] = None
-_broker: Optional[AlpacaBroker] = None
-_order_manager: Optional[OrderManager] = None
-_position_manager: Optional[PositionManager] = None
 _risk_manager: Optional[RiskManager] = None
 _db: Optional[Database] = None
-
-
-def get_alpaca_auth() -> AlpacaAuth:
-    global _auth
-    if _auth is None:
-        _auth = AlpacaAuth()
-    return _auth
-
-
-def get_broker() -> AlpacaBroker:
-    global _broker
-    if _broker is None:
-        _broker = AlpacaBroker(get_alpaca_auth())
-    return _broker
-
-
-def get_order_manager() -> OrderManager:
-    global _order_manager
-    if _order_manager is None:
-        _order_manager = OrderManager(get_alpaca_auth().client)
-    return _order_manager
-
-
-def get_position_manager() -> PositionManager:
-    global _position_manager
-    if _position_manager is None:
-        _position_manager = PositionManager(get_alpaca_auth().client)
-    return _position_manager
 
 
 def get_risk_manager() -> RiskManager:
@@ -74,14 +42,14 @@ def get_db() -> Database:
 
 
 # ── JWT Helpers ──────────────────────────────────
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, user_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"sub": subject, "exp": expire, "type": "access"}, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode({"sub": subject, "uid": user_id, "exp": expire, "type": "access"}, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def create_refresh_token(subject: str) -> str:
+def create_refresh_token(subject: str, user_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"sub": subject, "exp": expire, "type": "refresh"}, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode({"sub": subject, "uid": user_id, "exp": expire, "type": "refresh"}, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -123,26 +91,68 @@ def create_user(email: str, password: str, full_name: str = None) -> dict:
     return {"id": str(row[0]), "email": row[1], "full_name": row[2], "is_active": row[3], "created_at": row[4]}
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
+        email: str = payload.get("sub")
+        user_id: str = payload.get("uid")
         token_type: str = payload.get("type")
-        if username is None or token_type != "access":
+        if email is None or user_id is None or token_type != "access":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
-        return username
+        return {"id": user_id, "email": email}
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido o expirado")
 
 
-def decode_refresh_token(token: str) -> str:
+def decode_refresh_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
+        email: str = payload.get("sub")
+        user_id: str = payload.get("uid")
         token_type: str = payload.get("type")
-        if username is None or token_type != "refresh":
+        if email is None or user_id is None or token_type != "refresh":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token inválido")
-        return username
+        return {"id": user_id, "email": email}
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token inválido o expirado")
+
+
+# ── Per-user Alpaca dependencies ─────────────────
+def get_user_api_keys(user_id: str) -> dict:
+    db = get_db()
+    cursor = db.conn.cursor()
+    cursor.execute(
+        "SELECT api_key_encrypted, secret_key_encrypted, broker_name, environment "
+        "FROM api_keys WHERE user_id = %s AND is_active = TRUE ORDER BY created_at DESC LIMIT 1",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontraron API keys activas para este usuario",
+        )
+    return {
+        "api_key": row[0],
+        "secret_key": row[1],
+        "broker_name": row[2],
+        "environment": row[3],
+    }
+
+
+def get_alpaca_auth(current_user: dict = Depends(get_current_user)) -> AlpacaAuth:
+    keys = get_user_api_keys(current_user["id"])
+    return AlpacaAuth(api_key=keys["api_key"], secret_key=keys["secret_key"])
+
+
+def get_broker(auth: AlpacaAuth = Depends(get_alpaca_auth)) -> AlpacaBroker:
+    return AlpacaBroker(auth)
+
+
+def get_order_manager(auth: AlpacaAuth = Depends(get_alpaca_auth)) -> OrderManager:
+    return OrderManager(auth.client)
+
+
+def get_position_manager(auth: AlpacaAuth = Depends(get_alpaca_auth)) -> PositionManager:
+    return PositionManager(auth.client)

@@ -5,9 +5,9 @@ from alpaca.trading.client import TradingClient
 class AlpacaAuth:
     """Gestiona la autenticación con la API de Alpaca."""
 
-    def __init__(self):
-        self.api_key = os.getenv("ALPACA_API_KEY")
-        self.api_secret = os.getenv("ALPACA_SECRET_KEY")
+    def __init__(self, api_key: str = None, secret_key: str = None):
+        self.api_key = api_key or os.getenv("ALPACA_API_KEY")
+        self.api_secret = secret_key or os.getenv("ALPACA_SECRET_KEY")
         self.base_url = os.getenv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
         self._client = None
 

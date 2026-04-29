@@ -24,15 +24,15 @@ def login(body: LoginRequest):
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas")
     return TokenResponse(
-        access_token=create_access_token(user["email"]),
-        refresh_token=create_refresh_token(user["email"]),
+        access_token=create_access_token(user["email"], user["id"]),
+        refresh_token=create_refresh_token(user["email"], user["id"]),
     )
 
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(body: RefreshRequest):
-    email = decode_refresh_token(body.refresh_token)
+    user = decode_refresh_token(body.refresh_token)
     return TokenResponse(
-        access_token=create_access_token(email),
-        refresh_token=create_refresh_token(email),
+        access_token=create_access_token(user["email"], user["id"]),
+        refresh_token=create_refresh_token(user["email"], user["id"]),
     )
