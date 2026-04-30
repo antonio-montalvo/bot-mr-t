@@ -33,6 +33,22 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+# ── API Keys ──────────────────────────────────────
+class ApiKeyCreate(BaseModel):
+    broker_name: str
+    environment: str
+    api_key: str
+    secret_key: str
+
+
+class ApiKeyResponse(BaseModel):
+    id: str
+    broker_name: str
+    environment: str
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+
+
 # ── Broker ───────────────────────────────────────
 class OrderRequest(BaseModel):
     symbol: str

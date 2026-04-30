@@ -12,6 +12,7 @@ from app.api.config import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_EXPIRE_MINUTES,
 )
+from app.api.crypto import decrypt
 from app.auth import AlpacaAuth
 from app.broker import AlpacaBroker
 from app.orders import OrderManager
@@ -134,8 +135,8 @@ def get_user_api_keys(user_id: str) -> dict:
             detail="No se encontraron API keys activas para este usuario",
         )
     return {
-        "api_key": row[0],
-        "secret_key": row[1],
+        "api_key": decrypt(row[0]),
+        "secret_key": decrypt(row[1]),
         "broker_name": row[2],
         "environment": row[3],
     }
