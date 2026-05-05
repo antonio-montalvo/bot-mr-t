@@ -136,3 +136,57 @@ class PerformanceResponse(BaseModel):
     avg_profit: float
     avg_loss: float
     sharpe_ratio: Optional[float] = None
+
+
+# ── Dashboard ───────────────────────────────────
+class DashboardBotSummary(BaseModel):
+    id: str
+    name: str
+    status: str
+    environment: str
+    last_run_at: Optional[datetime] = None
+
+
+class DashboardAccountSummary(BaseModel):
+    equity: float
+    cash: float
+    buying_power: float
+    currency: str = "USD"
+
+
+class DashboardPerformance(BaseModel):
+    daily_pnl: float
+    total_pnl: float
+    open_positions: int
+    orders_today: int
+
+
+class DashboardPosition(BaseModel):
+    symbol: str
+    qty: float
+    avg_price: float
+    current_price: float
+    unrealized_pnl: float
+
+
+class DashboardOrder(BaseModel):
+    symbol: str
+    side: str
+    qty: float
+    status: str
+    submitted_at: Optional[datetime] = None
+
+
+class DashboardLog(BaseModel):
+    level: str
+    message: str
+    created_at: Optional[datetime] = None
+
+
+class DashboardSummaryResponse(BaseModel):
+    bot: DashboardBotSummary
+    account: DashboardAccountSummary
+    performance: DashboardPerformance
+    positions: list[DashboardPosition]
+    recent_orders: list[DashboardOrder]
+    recent_logs: list[DashboardLog]

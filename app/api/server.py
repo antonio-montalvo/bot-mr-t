@@ -10,6 +10,7 @@ from app.api.routers.broker_router import router as broker_router
 from app.api.routers.strategy_router import router as strategy_router
 from app.api.routers.bot_router import router as bot_router
 from app.api.routers.metrics_router import router as metrics_router
+from app.api.routers.dashboard_router import router as dashboard_router
 from app.api.deps import get_db
 from app.logs import setup_logger
 
@@ -34,6 +35,7 @@ app.include_router(broker_router)
 app.include_router(strategy_router)
 app.include_router(bot_router)
 app.include_router(metrics_router)
+app.include_router(dashboard_router)
 
 
 @app.on_event("startup")
