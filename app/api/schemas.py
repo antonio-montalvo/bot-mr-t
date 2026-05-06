@@ -113,6 +113,11 @@ class StrategyResponse(BaseModel):
 
 
 # ── Bot ──────────────────────────────────────────
+class BotInstanceItem(BaseModel):
+    id: str
+    name: str
+
+
 class BotStatusResponse(BaseModel):
     is_running: bool
     strategy: Optional[str] = None

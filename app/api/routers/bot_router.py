@@ -1,12 +1,13 @@
 import logging
 import threading
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.schemas import BotStatusResponse
-from app.api.deps import get_current_user
+from app.api.schemas import BotInstanceItem, BotStatusResponse
+from app.api.deps import get_current_user, get_db
+from app.db import Database
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,20 @@ def stop_bot():
 @router.get("/status", response_model=BotStatusResponse)
 def get_status():
     return _build_status()
+
+
+@router.get("/bots", response_model=List[BotInstanceItem])
+def list_bots(
+    current_user: dict = Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    cursor = db.conn.cursor()
+    cursor.execute(
+        "SELECT id, name FROM bot_instances WHERE user_id = %s",
+        (current_user["id"],),
+    )
+    rows = cursor.fetchall()
+    return [BotInstanceItem(id=str(row[0]), name=row[1]) for row in rows]
 
 
 def _build_status() -> BotStatusResponse:
