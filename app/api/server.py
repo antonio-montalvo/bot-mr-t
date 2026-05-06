@@ -13,6 +13,7 @@ from app.api.routers.metrics_router import router as metrics_router
 from app.api.routers.dashboard_router import router as dashboard_router
 from app.api.deps import get_db
 from app.logs import setup_logger
+from app.sync import SyncScheduler
 
 setup_logger()
 
@@ -37,10 +38,22 @@ app.include_router(bot_router)
 app.include_router(metrics_router)
 app.include_router(dashboard_router)
 
+_sync_scheduler: SyncScheduler = None
+
 
 @app.on_event("startup")
 def startup():
-    get_db()
+    global _sync_scheduler
+    db = get_db()
+    _sync_scheduler = SyncScheduler(db)
+    _sync_scheduler.start()
+
+
+@app.on_event("shutdown")
+def shutdown():
+    global _sync_scheduler
+    if _sync_scheduler:
+        _sync_scheduler.stop()
 
 
 @app.get("/health", tags=["Health"])

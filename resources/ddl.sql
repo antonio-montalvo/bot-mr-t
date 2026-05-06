@@ -201,6 +201,37 @@ CREATE TABLE IF NOT EXISTS market_candles (
     UNIQUE (asset_id, timeframe, candle_time)
 );
 
+-- ─── ACCOUNT_CURRENT_STATE ─────────────────────────────────
+CREATE TABLE account_current_state (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    bot_id UUID NOT NULL UNIQUE,
+
+    broker_name VARCHAR(50) NOT NULL,
+    environment VARCHAR(20) NOT NULL,
+
+    account_id VARCHAR(100),
+
+    equity NUMERIC(18,2) NOT NULL DEFAULT 0,
+    cash NUMERIC(18,2) NOT NULL DEFAULT 0,
+    buying_power NUMERIC(18,2) NOT NULL DEFAULT 0,
+    portfolio_value NUMERIC(18,2) NOT NULL DEFAULT 0,
+
+    currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+
+    is_blocked BOOLEAN NOT NULL DEFAULT FALSE,
+    trading_blocked BOOLEAN NOT NULL DEFAULT FALSE,
+
+    last_synced_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_account_current_state_bot
+        FOREIGN KEY (bot_id)
+        REFERENCES bot_instances(id)
+        ON DELETE CASCADE
+);
+
 -- ─── ÍNDICES ───────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_api_keys_user        ON api_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_bot_instances_user    ON bot_instances(user_id);
@@ -218,3 +249,5 @@ CREATE INDEX IF NOT EXISTS idx_account_snap_bot      ON account_snapshots(bot_id
 CREATE INDEX IF NOT EXISTS idx_risk_events_bot       ON risk_events(bot_id);
 CREATE INDEX IF NOT EXISTS idx_system_logs_bot       ON system_logs(bot_id);
 CREATE INDEX IF NOT EXISTS idx_market_candles_asset  ON market_candles(asset_id);
+CREATE INDEX IF NOT EXISTS idx_account_current_state_bot_id    ON account_current_state(bot_id);
+CREATE INDEX IF NOT EXISTS idx_account_current_state_last_synced ON account_current_state(last_synced_at);
