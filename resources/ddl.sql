@@ -202,7 +202,7 @@ CREATE TABLE IF NOT EXISTS market_candles (
 );
 
 -- ─── ACCOUNT_CURRENT_STATE ─────────────────────────────────
-CREATE TABLE account_current_state (
+CREATE TABLE IF NOT EXISTS account_current_state (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     bot_id UUID NOT NULL UNIQUE,
