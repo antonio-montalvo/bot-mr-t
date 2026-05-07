@@ -113,6 +113,21 @@ class StrategyResponse(BaseModel):
 
 
 # ── Bot ──────────────────────────────────────────
+class BotCreateRequest(BaseModel):
+    name: str
+    broker_name: str = "alpaca"
+    environment: str = "paper"
+
+
+class BotCreateResponse(BaseModel):
+    id: str
+    name: str
+    broker_name: str
+    environment: str
+    status: str
+    strategy_id: Optional[str] = None
+
+
 class BotInstanceItem(BaseModel):
     id: str
     name: str
