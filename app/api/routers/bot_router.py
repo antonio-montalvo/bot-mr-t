@@ -143,6 +143,49 @@ def list_bots(
     return [BotInstanceItem(id=str(row[0]), name=row[1]) for row in rows]
 
 
+@router.delete("/{bot_id}")
+def delete_bot(
+    bot_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Database = Depends(get_db),
+    manager: BotManager = Depends(_get_bot_manager),
+):
+    """Elimina un bot y todos sus datos asociados."""
+    logger.info("Eliminando bot %s para usuario %s", bot_id, current_user["id"])
+    
+    # Verificar ownership
+    _verify_bot_ownership(db, bot_id, current_user["id"])
+    
+    # Detener el bot si está corriendo
+    try:
+        manager.stop_bot(bot_id)
+        logger.info("Bot %s detenido antes de eliminar", bot_id)
+    except Exception as e:
+        logger.warning("Error deteniendo bot %s: %s", bot_id, e)
+    
+    cursor = db.conn.cursor()
+    
+    try:
+        # Eliminar bot_instance (las foreign keys con ON DELETE CASCADE
+        # eliminarán automáticamente strategies, orders, executions, etc.)
+        cursor.execute("DELETE FROM bot_instances WHERE id = %s", (bot_id,))
+        
+        db.conn.commit()
+        
+        logger.info("Bot %s eliminado exitosamente (CASCADE eliminó datos relacionados)", bot_id)
+        
+        return {
+            "status": "deleted",
+            "bot_id": bot_id,
+            "message": "Bot eliminado exitosamente"
+        }
+        
+    except Exception as e:
+        db.conn.rollback()
+        logger.error("Error eliminando bot %s: %s", bot_id, e)
+        raise HTTPException(status_code=500, detail=f"Error eliminando bot: {str(e)}")
+
+
 def _verify_bot_ownership(db: Database, bot_id: str, user_id: str):
     """Verifica que el bot pertenece al usuario autenticado."""
     cursor = db.conn.cursor()
