@@ -2,6 +2,7 @@ from alpaca.trading.client import TradingClient
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+from alpaca.data.enums import DataFeed
 
 from app.auth import AlpacaAuth
 
@@ -14,6 +15,7 @@ class AlpacaBroker:
         self.data_client = StockHistoricalDataClient(
             api_key=auth.api_key,
             secret_key=auth.api_secret,
+            raw_data=False,
         )
 
     def get_account(self):
@@ -25,6 +27,7 @@ class AlpacaBroker:
             timeframe=timeframe,
             start=start,
             end=end,
+            feed=DataFeed.IEX,
         )
         return self.data_client.get_stock_bars(request)
 

@@ -15,6 +15,7 @@ import numpy as np
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest, StockSnapshotRequest
 from alpaca.data.timeframe import TimeFrame
+from alpaca.data.enums import DataFeed
 
 from app.bots.config import LiquidityConfig, InstitutionalConfig, ScorerConfig
 
@@ -53,21 +54,37 @@ class Scanner:
         self.scorer = scorer_config
 
     def scan(self, symbols: list[str]) -> list[ScanResult]:
-        """Escanea una lista de símbolos y retorna candidatos válidos rankeados."""
+        """Escanea una lista de símbolos y retorna candidatos ordenados por score."""
+        logger.info("Scanner: Iniciando scan de %d símbolos...", len(symbols))
         results = []
-        spy_bars = self._get_daily_bars("SPY", days=60)
-        spy_returns = self._calc_returns(spy_bars) if spy_bars else None
 
+        # Obtener SPY para relative strength
+        spy_bars = self._get_daily_bars("SPY", days=220)
+        spy_returns = self._calc_returns(spy_bars) if spy_bars else None
+        
+        if spy_returns is None:
+            logger.warning("Scanner: No se pudo obtener SPY para relative strength")
+
+        passed_count = 0
         for symbol in symbols:
             try:
                 result = self._evaluate_symbol(symbol, spy_returns)
                 if result and result.passes_liquidity and result.passes_institutional:
                     results.append(result)
+                    passed_count += 1
+                    logger.debug("Scanner: %s PASSED - Score: %.2f", symbol, result.score)
             except Exception as e:
-                logger.debug("Error escaneando %s: %s", symbol, e)
+                logger.debug("Scanner: Error escaneando %s: %s", symbol, e)
 
+        logger.info("Scanner: %d/%d símbolos pasaron filtros", passed_count, len(symbols))
+        
         # Ordenar por score descendente
         results.sort(key=lambda r: r.score, reverse=True)
+        
+        if results:
+            logger.info("Scanner: Top 3 candidatos: %s", 
+                       [(r.symbol, round(r.score, 2)) for r in results[:3]])
+        
         return results
 
     def _evaluate_symbol(self, symbol: str, spy_returns: Optional[np.ndarray]) -> Optional[ScanResult]:
@@ -152,6 +169,7 @@ class Scanner:
             timeframe=TimeFrame.Day,
             start=start,
             end=end,
+            feed=DataFeed.IEX,
         )
         try:
             bars_data = self.data_client.get_stock_bars(request)

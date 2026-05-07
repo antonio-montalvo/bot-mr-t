@@ -14,6 +14,7 @@ import numpy as np
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+from alpaca.data.enums import DataFeed
 
 from app.bots.config import SqueezeConfig
 
@@ -49,10 +50,13 @@ class SignalGenerator:
 
     def evaluate(self, symbol: str) -> Signal:
         """Evalúa un símbolo y genera una señal."""
+        logger.info("SignalGenerator: Evaluando %s...", symbol)
         signal = Signal(symbol)
 
         bars = self._get_bars(symbol, days=100)
-        if bars is None or len(bars) < max(self.config.bb_length, self.config.kc_length, self.config.momentum_length) + 10:
+        min_bars = max(self.config.bb_length, self.config.kc_length, self.config.momentum_length) + 10
+        if bars is None or len(bars) < min_bars:
+            logger.warning("SignalGenerator: %s - Datos insuficientes (necesita %d barras)", symbol, min_bars)
             return signal
 
         closes = np.array([float(bar.close) for bar in bars])
@@ -102,9 +106,16 @@ class SignalGenerator:
             signal.breakout_confirmed
         )
 
+        logger.info("SignalGenerator: %s - Squeeze: %s, Momentum: %s, Breakout: %s → Valid: %s",
+                   symbol, 
+                   "FIRED ✓" if signal.squeeze_fired else "NO ✗",
+                   "POS ✓" if signal.momentum_positive else "NEG ✗",
+                   "YES ✓" if signal.breakout_confirmed else "NO ✗",
+                   "YES" if signal.is_valid else "NO")
+
         if signal.is_valid:
             logger.info(
-                "SIGNAL VALID: %s @ %.2f | ATR=%.2f | Squeeze fired + Momentum + Breakout",
+                "SignalGenerator: ✓ SIGNAL VALID: %s @ $%.2f | ATR=%.2f",
                 symbol, signal.entry_price, signal.atr
             )
 
@@ -184,6 +195,7 @@ class SignalGenerator:
             timeframe=TimeFrame.Day,
             start=start,
             end=end,
+            feed=DataFeed.IEX,
         )
         try:
             bars_data = self.data_client.get_stock_bars(request)

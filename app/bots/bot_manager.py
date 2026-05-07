@@ -29,22 +29,34 @@ class BotManager:
 
     def start_bot(self, bot_id: str) -> dict:
         """Inicia un bot por su ID."""
+        logger.info("BotManager: Iniciando bot %s...", bot_id)
+        
         if bot_id in self._engines and self._engines[bot_id].is_running:
+            logger.warning("BotManager: Bot %s ya está corriendo", bot_id)
             return {"status": "already_running", "bot_id": bot_id}
 
         # Obtener info del bot
+        logger.info("BotManager: Obteniendo información del bot %s...", bot_id)
         bot_info = self._get_bot_info(bot_id)
         if not bot_info:
+            logger.error("BotManager: Bot %s no encontrado en DB", bot_id)
             return {"status": "error", "detail": "Bot no encontrado"}
+        
+        logger.info("BotManager: Bot %s - Name: %s, Env: %s", 
+                   bot_id, bot_info["name"], bot_info["environment"])
 
         # Obtener credenciales de Alpaca
+        logger.info("BotManager: Creando clientes Alpaca para bot %s...", bot_id)
         clients = self._create_clients(bot_info["user_id"], bot_info["environment"])
         if not clients:
+            logger.error("BotManager: No se pudieron obtener credenciales de Alpaca para bot %s", bot_id)
             return {"status": "error", "detail": "No se pudieron obtener credenciales de Alpaca"}
 
         trading_client, data_client = clients
+        logger.info("BotManager: ✓ Clientes Alpaca creados para bot %s", bot_id)
 
         # Crear y arrancar el engine
+        logger.info("BotManager: Creando BotEngine para bot %s...", bot_id)
         config = BotConfig()
         engine = BotEngine(
             bot_id=bot_id,
@@ -53,15 +65,21 @@ class BotManager:
             db=self.db,
             config=config,
         )
+        
+        logger.info("BotManager: Arrancando BotEngine para bot %s...", bot_id)
         engine.start()
         self._engines[bot_id] = engine
 
+        logger.info("BotManager: ✓ Bot %s iniciado exitosamente", bot_id)
         return {"status": "started", "bot_id": bot_id}
 
     def stop_bot(self, bot_id: str) -> dict:
         """Detiene un bot por su ID."""
+        logger.info("BotManager: Deteniendo bot %s...", bot_id)
+        
         engine = self._engines.get(bot_id)
         if not engine or not engine.is_running:
+            logger.warning("BotManager: Bot %s no está corriendo", bot_id)
             # Actualizar estado en DB por si acaso
             self._force_stop_status(bot_id)
             return {"status": "not_running", "bot_id": bot_id}
@@ -156,6 +174,7 @@ class BotManager:
             data_client = StockHistoricalDataClient(
                 api_key=api_key,
                 secret_key=secret_key,
+                raw_data=False,
             )
 
             return trading_client, data_client

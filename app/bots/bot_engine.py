@@ -123,62 +123,85 @@ class BotEngine:
 
     def _cycle(self):
         """Un ciclo completo de la estrategia."""
+        self._log("INFO", "cycle", "=== Iniciando ciclo de estrategia ===")
+        
         # 1. Verificar si el mercado está abierto
         try:
             clock = self.trading_client.get_clock()
             if not clock.is_open:
+                self._log("INFO", "market_check", "Mercado CERRADO - esperando apertura")
                 logger.debug("Mercado cerrado, esperando...")
                 return
+            self._log("INFO", "market_check", "Mercado ABIERTO - continuando")
         except Exception as e:
             self._log("ERROR", "bot_engine", f"Error verificando clock: {e}")
             return
 
         # 2. Market Regime Filter
+        self._log("INFO", "market_regime", "Evaluando régimen de mercado...")
         if not self.market_filter.is_bullish():
-            self._log("INFO", "bot_engine", "Market regime: CASH MODE - no operar")
+            self._log("WARNING", "market_regime", "Market regime: CASH MODE - no operar nuevas posiciones")
             # Gestionar posiciones existentes (trailing stops)
             self._manage_open_positions()
             return
+        self._log("INFO", "market_regime", "Market regime: BULLISH - OK para operar")
 
         # 3. Verificar si podemos abrir nuevas posiciones
+        self._log("INFO", "risk_check", "Verificando límites de riesgo...")
         if not self.risk_manager.can_trade():
+            self._log("WARNING", "risk_check", "Límites de riesgo alcanzados - no abrir nuevas posiciones")
             self._manage_open_positions()
             return
+        self._log("INFO", "risk_check", "Límites de riesgo OK - puede operar")
 
         # 4. Escanear candidatos
+        self._log("INFO", "scanner", f"Escaneando watchlist ({len(self.config.watchlist)} símbolos)...")
         candidates = self.scanner.scan(self.config.watchlist)
         if not candidates:
+            self._log("INFO", "scanner", "No se encontraron candidatos válidos")
             self._manage_open_positions()
             return
 
-        self._log("INFO", "scanner", f"Candidatos encontrados: {len(candidates)}")
+        self._log("INFO", "scanner", f"✓ Candidatos encontrados: {len(candidates)} - Top: {[c.symbol for c in candidates[:5]]}")
+        self._log("INFO", "scanner", f"Scores: {[(c.symbol, round(c.total_score, 2)) for c in candidates[:5]]}")
 
         # 5. Generar señales para los top candidatos
-        for candidate in candidates[:5]:  # Evaluar top 5
+        self._log("INFO", "signal_gen", "Evaluando señales para top 5 candidatos...")
+        for idx, candidate in enumerate(candidates[:5], 1):  # Evaluar top 5
             if not self._running:
                 break
 
+            self._log("INFO", "signal_gen", f"[{idx}/5] Evaluando {candidate.symbol}...")
             signal = self.signal_generator.evaluate(candidate.symbol)
 
             if signal.is_valid and signal.entry_price > 0:
+                self._log("INFO", "signal_gen", f"✓ Señal VÁLIDA para {signal.symbol} - Entry: ${signal.entry_price:.2f}, ATR: {signal.atr:.2f}")
                 # 6. Verificar riesgo y ejecutar
                 self._execute_entry(signal)
 
                 # Re-verificar si podemos seguir operando
                 if not self.risk_manager.can_trade():
+                    self._log("INFO", "risk_check", "Límites alcanzados después de entrada - deteniendo búsqueda")
                     break
+            else:
+                self._log("INFO", "signal_gen", f"✗ Señal NO válida para {candidate.symbol}")
 
         # 7. Gestionar posiciones abiertas
+        self._log("INFO", "position_mgmt", "Gestionando posiciones abiertas...")
         self._manage_open_positions()
+        self._log("INFO", "cycle", "=== Ciclo completado ===")
 
     # ─── Ejecución de entrada ────────────────────────────────────────────
 
     def _execute_entry(self, signal):
         """Ejecuta una entrada basada en la señal."""
         try:
+            self._log("INFO", "execution", f"Preparando entrada para {signal.symbol}...")
+            
             # Obtener equity actual
             account = self.trading_client.get_account()
             equity = float(account.equity)
+            self._log("INFO", "execution", f"Equity actual: ${equity:,.2f}")
 
             # Calcular position size
             qty = self.risk_manager.calculate_position_size(
@@ -186,18 +209,24 @@ class BotEngine:
             )
 
             if qty <= 0:
+                self._log("WARNING", "execution", f"Position size = 0 para {signal.symbol}, skip")
                 logger.debug("Position size = 0 para %s, skip", signal.symbol)
                 return
 
             # Verificar que no tengamos ya posición en este símbolo
             if self._has_open_position(signal.symbol):
+                self._log("WARNING", "execution", f"Ya existe posición abierta en {signal.symbol}, skip")
                 return
+            
+            self._log("INFO", "execution", f"Position size calculado: {qty} acciones")
 
             # Calcular stops
             stop_loss = self.risk_manager.calculate_stop_loss(signal.entry_price, signal.atr)
             take_profit = self.risk_manager.calculate_take_profit(signal.entry_price, stop_loss)
+            self._log("INFO", "execution", f"Stops calculados - SL: ${stop_loss:.2f}, TP: ${take_profit:.2f}")
 
             # Enviar orden market
+            self._log("INFO", "execution", f"Enviando orden MARKET BUY {signal.symbol} x{qty}...")
             order_request = MarketOrderRequest(
                 symbol=signal.symbol,
                 qty=qty,
@@ -206,6 +235,7 @@ class BotEngine:
             )
 
             order = self.trading_client.submit_order(order_request)
+            self._log("INFO", "execution", f"✓ Orden enviada - Order ID: {order.id}")
 
             # Registrar en DB
             self._record_order(signal, order, qty, stop_loss, take_profit)
@@ -227,11 +257,22 @@ class BotEngine:
         """Gestiona trailing stops y salidas para posiciones abiertas."""
         try:
             positions = self.trading_client.get_all_positions()
-
+            
+            if not positions:
+                self._log("INFO", "position_mgmt", "No hay posiciones abiertas")
+                return
+            
+            self._log("INFO", "position_mgmt", f"Revisando {len(positions)} posición(es) abierta(s)")
             for pos in positions:
+                unrealized_pnl = float(pos.unrealized_pl)
+                unrealized_pnl_pct = float(pos.unrealized_plpc) * 100
+                self._log("INFO", "position_mgmt", 
+                         f"{pos.symbol}: Qty={pos.qty}, Entry=${pos.avg_entry_price}, "
+                         f"Current=${pos.current_price}, PnL={unrealized_pnl_pct:.2f}%")
                 self._check_exit_conditions(pos)
 
         except Exception as e:
+            self._log("ERROR", "position_mgmt", f"Error gestionando posiciones: {e}")
             logger.debug("Error gestionando posiciones: %s", e)
 
     def _check_exit_conditions(self, position):
@@ -274,14 +315,15 @@ class BotEngine:
     def _close_position(self, symbol: str, qty: int, reason: str):
         """Cierra una posición (total o parcial)."""
         try:
+            self._log("INFO", "execution", f"Cerrando posición {symbol} x{qty} - Razón: {reason}")
             order_request = MarketOrderRequest(
                 symbol=symbol,
                 qty=qty,
                 side=OrderSide.SELL,
                 time_in_force=TimeInForce.DAY,
             )
-            self.trading_client.submit_order(order_request)
-            self._log("INFO", "execution", f"VENTA: {symbol} x{qty} | Razón: {reason}")
+            order = self.trading_client.submit_order(order_request)
+            self._log("INFO", "execution", f"✓ VENTA ejecutada: {symbol} x{qty} | Razón: {reason} | Order ID: {order.id}")
         except Exception as e:
             self._log("ERROR", "execution", f"Error cerrando {symbol}: {e}")
 
