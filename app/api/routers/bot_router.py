@@ -1,60 +1,88 @@
 import logging
-import threading
-from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.schemas import BotInstanceItem, BotStatusResponse
 from app.api.deps import get_current_user, get_db
 from app.db import Database
+from app.bots import BotManager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/bot", tags=["Bot"], dependencies=[Depends(get_current_user)])
 
-# ── Bot state (in-memory) ────────────────────────
-_bot_running = False
-_bot_thread: Optional[threading.Thread] = None
-_bot_started_at: Optional[datetime] = None
-_bot_strategy: Optional[str] = None
+# ── Bot Manager (singleton) ──────────────────────
+_bot_manager: BotManager = None
+
+
+def _get_bot_manager(db: Database = Depends(get_db)) -> BotManager:
+    global _bot_manager
+    if _bot_manager is None:
+        _bot_manager = BotManager(db)
+    return _bot_manager
 
 
 @router.post("/start", response_model=BotStatusResponse)
-def start_bot():
-    global _bot_running, _bot_started_at, _bot_strategy
+def start_bot(
+    bot_id: str = Query(..., description="ID del bot a iniciar"),
+    current_user: dict = Depends(get_current_user),
+    db: Database = Depends(get_db),
+    manager: BotManager = Depends(_get_bot_manager),
+):
+    # Verificar que el bot pertenece al usuario
+    _verify_bot_ownership(db, bot_id, current_user["id"])
 
-    if _bot_running:
-        raise HTTPException(status_code=400, detail="El bot ya está en ejecución")
+    result = manager.start_bot(bot_id)
 
-    _bot_running = True
-    _bot_started_at = datetime.now(timezone.utc)
-    _bot_strategy = "default"
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result.get("detail", "Error iniciando bot"))
 
-    logger.info("Bot iniciado manualmente via API")
-
-    return _build_status()
+    status = manager.get_status(bot_id)
+    return BotStatusResponse(
+        is_running=status["is_running"],
+        strategy=status.get("strategy"),
+        started_at=status.get("started_at"),
+        uptime_seconds=status.get("uptime_seconds"),
+    )
 
 
 @router.post("/stop", response_model=BotStatusResponse)
-def stop_bot():
-    global _bot_running, _bot_started_at, _bot_strategy
+def stop_bot(
+    bot_id: str = Query(..., description="ID del bot a detener"),
+    current_user: dict = Depends(get_current_user),
+    db: Database = Depends(get_db),
+    manager: BotManager = Depends(_get_bot_manager),
+):
+    _verify_bot_ownership(db, bot_id, current_user["id"])
 
-    if not _bot_running:
-        raise HTTPException(status_code=400, detail="El bot no está en ejecución")
+    manager.stop_bot(bot_id)
 
-    _bot_running = False
-    _bot_started_at = None
-    _bot_strategy = None
-
-    logger.info("Bot detenido manualmente via API")
-
-    return _build_status()
+    status = manager.get_status(bot_id)
+    return BotStatusResponse(
+        is_running=status["is_running"],
+        strategy=status.get("strategy"),
+        started_at=status.get("started_at"),
+        uptime_seconds=status.get("uptime_seconds"),
+    )
 
 
 @router.get("/status", response_model=BotStatusResponse)
-def get_status():
-    return _build_status()
+def get_status(
+    bot_id: str = Query(..., description="ID del bot"),
+    current_user: dict = Depends(get_current_user),
+    db: Database = Depends(get_db),
+    manager: BotManager = Depends(_get_bot_manager),
+):
+    _verify_bot_ownership(db, bot_id, current_user["id"])
+
+    status = manager.get_status(bot_id)
+    return BotStatusResponse(
+        is_running=status["is_running"],
+        strategy=status.get("strategy"),
+        started_at=status.get("started_at"),
+        uptime_seconds=status.get("uptime_seconds"),
+    )
 
 
 @router.get("/bots", response_model=List[BotInstanceItem])
@@ -71,14 +99,12 @@ def list_bots(
     return [BotInstanceItem(id=str(row[0]), name=row[1]) for row in rows]
 
 
-def _build_status() -> BotStatusResponse:
-    uptime = None
-    if _bot_running and _bot_started_at:
-        uptime = (datetime.now(timezone.utc) - _bot_started_at).total_seconds()
-
-    return BotStatusResponse(
-        is_running=_bot_running,
-        strategy=_bot_strategy,
-        started_at=_bot_started_at,
-        uptime_seconds=uptime,
+def _verify_bot_ownership(db: Database, bot_id: str, user_id: str):
+    """Verifica que el bot pertenece al usuario autenticado."""
+    cursor = db.conn.cursor()
+    cursor.execute(
+        "SELECT id FROM bot_instances WHERE id = %s AND user_id = %s",
+        (bot_id, user_id),
     )
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Bot no encontrado")
