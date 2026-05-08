@@ -23,13 +23,25 @@ def _get_bot_manager(db: Database = Depends(get_db)) -> BotManager:
     return _bot_manager
 
 
-@router.post("/start", response_model=BotStatusResponse)
+@router.post(
+    "/start",
+    response_model=BotStatusResponse,
+    summary="Iniciar bot",
+    description="Inicia la ejecución de un bot de trading. El bot comenzará a ejecutar su estrategia configurada.",
+    responses={
+        200: {"description": "Bot iniciado exitosamente"},
+        400: {"description": "Error al iniciar el bot"},
+        401: {"description": "No autenticado"},
+        404: {"description": "Bot no encontrado"}
+    }
+)
 def start_bot(
     bot_id: str = Query(..., description="ID del bot a iniciar"),
     current_user: dict = Depends(get_current_user),
     db: Database = Depends(get_db),
     manager: BotManager = Depends(_get_bot_manager),
 ):
+    """Inicia un bot de trading que ejecutará su estrategia configurada."""
     # Verificar que el bot pertenece al usuario
     _verify_bot_ownership(db, bot_id, current_user["id"])
 
@@ -47,13 +59,24 @@ def start_bot(
     )
 
 
-@router.post("/stop", response_model=BotStatusResponse)
+@router.post(
+    "/stop",
+    response_model=BotStatusResponse,
+    summary="Detener bot",
+    description="Detiene la ejecución de un bot de trading activo.",
+    responses={
+        200: {"description": "Bot detenido exitosamente"},
+        401: {"description": "No autenticado"},
+        404: {"description": "Bot no encontrado"}
+    }
+)
 def stop_bot(
     bot_id: str = Query(..., description="ID del bot a detener"),
     current_user: dict = Depends(get_current_user),
     db: Database = Depends(get_db),
     manager: BotManager = Depends(_get_bot_manager),
 ):
+    """Detiene un bot de trading que está en ejecución."""
     _verify_bot_ownership(db, bot_id, current_user["id"])
 
     manager.stop_bot(bot_id)
@@ -67,13 +90,24 @@ def stop_bot(
     )
 
 
-@router.get("/status", response_model=BotStatusResponse)
+@router.get(
+    "/status",
+    response_model=BotStatusResponse,
+    summary="Obtener estado del bot",
+    description="Consulta el estado actual de un bot.",
+    responses={
+        200: {"description": "Estado obtenido exitosamente"},
+        401: {"description": "No autenticado"},
+        404: {"description": "Bot no encontrado"}
+    }
+)
 def get_status(
     bot_id: str = Query(..., description="ID del bot"),
     current_user: dict = Depends(get_current_user),
     db: Database = Depends(get_db),
     manager: BotManager = Depends(_get_bot_manager),
 ):
+    """Obtiene el estado actual de un bot de trading."""
     _verify_bot_ownership(db, bot_id, current_user["id"])
 
     status = manager.get_status(bot_id)
@@ -85,7 +119,18 @@ def get_status(
     )
 
 
-@router.post("/create", response_model=BotCreateResponse)
+@router.post(
+    "/create",
+    response_model=BotCreateResponse,
+    status_code=201,
+    summary="Crear nuevo bot",
+    description="Crea una nueva instancia de bot de trading con su estrategia.",
+    responses={
+        201: {"description": "Bot creado exitosamente"},
+        400: {"description": "Datos inválidos"},
+        401: {"description": "No autenticado"}
+    }
+)
 def create_bot(
     body: BotCreateRequest,
     current_user: dict = Depends(get_current_user),
@@ -129,11 +174,21 @@ def create_bot(
     )
 
 
-@router.get("/bots", response_model=List[BotInstanceItem])
+@router.get(
+    "/bots",
+    response_model=List[BotInstanceItem],
+    summary="Listar bots del usuario",
+    description="Obtiene la lista de todos los bots del usuario autenticado.",
+    responses={
+        200: {"description": "Lista de bots obtenida exitosamente"},
+        401: {"description": "No autenticado"}
+    }
+)
 def list_bots(
     current_user: dict = Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
+    """Lista todos los bots de trading del usuario actual."""
     cursor = db.conn.cursor()
     cursor.execute(
         "SELECT id, name FROM bot_instances WHERE user_id = %s",
@@ -143,14 +198,24 @@ def list_bots(
     return [BotInstanceItem(id=str(row[0]), name=row[1]) for row in rows]
 
 
-@router.delete("/{bot_id}")
+@router.delete(
+    "/{bot_id}",
+    summary="Eliminar bot",
+    description="Elimina un bot de trading y todos sus datos asociados. Si el bot está corriendo, se detiene automáticamente.",
+    responses={
+        200: {"description": "Bot eliminado exitosamente"},
+        401: {"description": "No autenticado"},
+        404: {"description": "Bot no encontrado"},
+        500: {"description": "Error al eliminar el bot"}
+    }
+)
 def delete_bot(
     bot_id: str,
     current_user: dict = Depends(get_current_user),
     db: Database = Depends(get_db),
     manager: BotManager = Depends(_get_bot_manager),
 ):
-    """Elimina un bot y todos sus datos asociados."""
+    """Elimina un bot y todos sus datos relacionados. Detiene el bot si está corriendo."""
     logger.info("Eliminando bot %s para usuario %s", bot_id, current_user["id"])
     
     # Verificar ownership

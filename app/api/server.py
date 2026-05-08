@@ -18,9 +18,67 @@ from app.sync import SyncScheduler
 setup_logger()
 
 app = FastAPI(
-    title="Bot Mr T - API",
-    description="API REST para la administración del bot de trading",
+    title="Bot Mr T - Trading Bot API",
+    description="""
+    ## API REST para la administración del bot de trading automatizado
+    
+    Esta API proporciona endpoints para:
+    
+    * **Autenticación** - Login, registro y gestión de usuarios
+    * **Broker** - Conexión con Alpaca, gestión de órdenes y posiciones
+    * **Bots** - Crear, iniciar, detener y eliminar bots de trading
+    * **Estrategias** - Configuración de estrategias de trading
+    * **Dashboard** - Métricas y resumen de rendimiento
+    * **Métricas** - Estadísticas detalladas de trading
+    
+    ### Autenticación
+    
+    La mayoría de los endpoints requieren autenticación mediante JWT token.
+    Use el endpoint `/auth/login` para obtener un token de acceso.
+    
+    ### Entornos
+    
+    - **Paper Trading**: Entorno de prueba con dinero virtual
+    - **Live Trading**: Entorno de producción con dinero real
+    """,
     version="1.0.0",
+    contact={
+        "name": "Bot Mr T",
+        "url": "https://github.com/antonio-montalvo/bot-mr-t",
+    },
+    license_info={
+        "name": "MIT",
+    },
+    openapi_tags=[
+        {
+            "name": "Health",
+            "description": "Health check endpoint"
+        },
+        {
+            "name": "Auth",
+            "description": "Autenticación y gestión de usuarios"
+        },
+        {
+            "name": "Broker",
+            "description": "Operaciones con el broker (Alpaca): órdenes, posiciones, cuenta"
+        },
+        {
+            "name": "Bot",
+            "description": "Gestión del ciclo de vida de bots de trading"
+        },
+        {
+            "name": "Strategy",
+            "description": "Configuración de estrategias de trading"
+        },
+        {
+            "name": "Dashboard",
+            "description": "Resumen y métricas del dashboard"
+        },
+        {
+            "name": "Metrics",
+            "description": "Métricas detalladas de rendimiento y trading"
+        }
+    ]
 )
 
 app.add_middleware(
