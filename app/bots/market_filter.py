@@ -34,9 +34,10 @@ class MarketFilter:
         """Retorna True si el mercado está en modo alcista (se puede operar)."""
         try:
             logger.info("MarketFilter: Obteniendo datos de %s...", self.config.spy_symbol)
-            spy_bars = self._get_bars(self.config.spy_symbol, days=100)
+            spy_bars = self._get_bars(self.config.spy_symbol, limit=100)
             if spy_bars is None or len(spy_bars) < self.config.ema_slow:
-                logger.warning("MarketFilter: Datos insuficientes para SPY (necesita %d barras)", self.config.ema_slow)
+                logger.warning("MarketFilter: Datos insuficientes para SPY (necesita %d barras, obtuvo %d)", 
+                             self.config.ema_slow, len(spy_bars) if spy_bars else 0)
                 return False
 
             closes = np.array([float(bar.close) for bar in spy_bars])
@@ -71,7 +72,7 @@ class MarketFilter:
     def _check_vix(self) -> bool:
         """Verifica que VIX esté por debajo del umbral."""
         try:
-            bars = self._get_bars(self.config.vix_symbol, days=5)
+            bars = self._get_bars(self.config.vix_symbol, limit=10)
             if bars is None or len(bars) == 0:
                 return True  # Si no podemos obtener VIX, asumimos OK
             current = float(bars[-1].close)
@@ -79,21 +80,17 @@ class MarketFilter:
         except Exception:
             return True
 
-    def _get_bars(self, symbol: str, days: int):
-        """Obtiene barras diarias históricas."""
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=days * 2)  # Margen extra por fines de semana
-
+    def _get_bars(self, symbol: str, limit: int = 100):
+        """Obtiene barras diarias históricas usando el parámetro limit de Alpaca."""
         request = StockBarsRequest(
             symbol_or_symbols=symbol,
             timeframe=TimeFrame.Day,
-            start=start,
-            end=end,
+            limit=limit,
             feed=DataFeed.IEX,
         )
         bars_data = self.data_client.get_stock_bars(request)
         bars = bars_data[symbol] if symbol in bars_data else []
-        return list(bars)[-days:] if bars else None
+        return list(bars) if bars else None
 
     @staticmethod
     def _ema(data: np.ndarray, period: int) -> np.ndarray:
