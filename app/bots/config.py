@@ -9,7 +9,11 @@ Basada en:
 - Risk Management (ATR-based)
 """
 
+import logging
 from dataclasses import dataclass, field
+from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -94,3 +98,37 @@ class BotConfig:
         "AMD", "CRM", "NFLX", "ADBE", "AVGO", "COST", "PEP",
         "LLY", "UNH", "V", "MA", "JPM", "HD",
     ])
+
+    @classmethod
+    def from_database(cls, db, strategy_id: str) -> "BotConfig":
+        """Carga la configuración desde strategy_parameters en la base de datos."""
+        from app.bots.config_loader import load_strategy_parameters, apply_parameters_to_config
+        
+        # Crear configuración con valores por defecto
+        config = cls()
+        
+        # Cargar parámetros de la DB
+        params = load_strategy_parameters(db, strategy_id)
+        
+        if not params:
+            logger.warning("No se encontraron parámetros para estrategia %s, usando defaults", strategy_id)
+            return config
+        
+        # Aplicar parámetros a cada sección
+        apply_parameters_to_config(config.market_regime, params, "market_regime.")
+        apply_parameters_to_config(config.liquidity, params, "liquidity.")
+        apply_parameters_to_config(config.institutional, params, "institutional.")
+        apply_parameters_to_config(config.squeeze, params, "squeeze.")
+        apply_parameters_to_config(config.risk, params, "risk.")
+        apply_parameters_to_config(config.scorer, params, "scorer.")
+        
+        # Parámetros generales del bot
+        if "timeframe" in params:
+            config.timeframe = params["timeframe"]
+        if "scan_interval_seconds" in params:
+            config.scan_interval_seconds = params["scan_interval_seconds"]
+        if "watchlist" in params:
+            config.watchlist = params["watchlist"]
+        
+        logger.info("Configuración cargada desde DB para estrategia %s", strategy_id)
+        return config

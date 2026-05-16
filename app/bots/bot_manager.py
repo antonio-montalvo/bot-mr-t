@@ -55,9 +55,18 @@ class BotManager:
         trading_client, data_client = clients
         logger.info("BotManager: ✓ Clientes Alpaca creados para bot %s", bot_id)
 
+        # Cargar configuración desde la base de datos
+        logger.info("BotManager: Cargando configuración para bot %s...", bot_id)
+        strategy_id = bot_info.get("strategy_id")
+        if strategy_id:
+            logger.info("BotManager: Cargando parámetros desde DB para estrategia %s...", strategy_id)
+            config = BotConfig.from_database(self.db, strategy_id)
+        else:
+            logger.warning("BotManager: Bot %s no tiene estrategia asociada, usando config por defecto", bot_id)
+            config = BotConfig()
+        
         # Crear y arrancar el engine
         logger.info("BotManager: Creando BotEngine para bot %s...", bot_id)
-        config = BotConfig()
         engine = BotEngine(
             bot_id=bot_id,
             trading_client=trading_client,
@@ -122,11 +131,15 @@ class BotManager:
     # ─── Helpers privados ────────────────────────────────────────────────
 
     def _get_bot_info(self, bot_id: str) -> Optional[dict]:
-        """Obtiene info del bot desde la DB."""
+        """Obtiene info del bot desde la DB, incluyendo strategy_id."""
         try:
             cursor = self.db.conn.cursor()
             cursor.execute(
-                "SELECT id, user_id, name, broker_name, environment, status FROM bot_instances WHERE id = %s",
+                """SELECT bi.id, bi.user_id, bi.name, bi.broker_name, bi.environment, bi.status, s.id as strategy_id
+                   FROM bot_instances bi
+                   LEFT JOIN strategies s ON s.bot_id = bi.id AND s.is_active = TRUE
+                   WHERE bi.id = %s
+                   LIMIT 1""",
                 (bot_id,),
             )
             row = cursor.fetchone()
@@ -139,6 +152,7 @@ class BotManager:
                 "broker_name": row[3],
                 "environment": row[4],
                 "status": row[5],
+                "strategy_id": str(row[6]) if row[6] else None,
             }
         except Exception as e:
             logger.error("Error obteniendo bot info: %s", e)

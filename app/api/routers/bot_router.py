@@ -162,6 +162,9 @@ def create_bot(
     )
     strategy_id = str(cursor.fetchone()[0])
 
+    # Insertar parámetros por defecto de la estrategia
+    _insert_default_strategy_parameters(cursor, strategy_id)
+
     db.conn.commit()
 
     return BotCreateResponse(
@@ -249,6 +252,65 @@ def delete_bot(
         db.conn.rollback()
         logger.error("Error eliminando bot %s: %s", bot_id, e)
         raise HTTPException(status_code=500, detail=f"Error eliminando bot: {str(e)}")
+
+
+def _insert_default_strategy_parameters(cursor, strategy_id: str):
+    """Inserta los parámetros por defecto de la estrategia en la base de datos."""
+    params = [
+        # Market Regime
+        ('market_regime.spy_symbol', 'SPY', 'str'),
+        ('market_regime.qqq_symbol', 'QQQ', 'str'),
+        ('market_regime.vix_symbol', 'VIXY', 'str'),
+        ('market_regime.ema_fast', '21', 'int'),
+        ('market_regime.ema_slow', '50', 'int'),
+        ('market_regime.vix_max', '25.0', 'float'),
+        # Liquidity
+        ('liquidity.min_avg_volume', '2000000', 'int'),
+        ('liquidity.min_dollar_volume', '20000000.0', 'float'),
+        ('liquidity.max_spread_pct', '0.0015', 'float'),
+        ('liquidity.min_price', '10.0', 'float'),
+        # Institutional
+        ('institutional.rs_lookback_days', '20', 'int'),
+        ('institutional.ema_short', '20', 'int'),
+        ('institutional.ema_mid', '50', 'int'),
+        ('institutional.ema_long', '200', 'int'),
+        ('institutional.volume_spike_multiplier', '1.5', 'float'),
+        # Squeeze
+        ('squeeze.bb_length', '20', 'int'),
+        ('squeeze.bb_std', '2.0', 'float'),
+        ('squeeze.kc_length', '20', 'int'),
+        ('squeeze.kc_atr_multiplier', '1.5', 'float'),
+        ('squeeze.momentum_length', '12', 'int'),
+        # Risk
+        ('risk.max_risk_per_trade_pct', '0.01', 'float'),
+        ('risk.atr_stop_multiplier', '1.5', 'float'),
+        ('risk.atr_length', '14', 'int'),
+        ('risk.take_profit_r_multiple', '2.0', 'float'),
+        ('risk.trailing_ema', '9', 'int'),
+        ('risk.daily_loss_limit_pct', '0.03', 'float'),
+        ('risk.max_drawdown_pct', '0.10', 'float'),
+        ('risk.max_open_positions', '5', 'int'),
+        # Scorer
+        ('scorer.weight_relative_strength', '0.30', 'float'),
+        ('scorer.weight_volume_expansion', '0.25', 'float'),
+        ('scorer.weight_squeeze_strength', '0.20', 'float'),
+        ('scorer.weight_trend_quality', '0.15', 'float'),
+        ('scorer.weight_volatility_expansion', '0.10', 'float'),
+        ('scorer.min_score', '0.6', 'float'),
+        # General
+        ('timeframe', '1Day', 'str'),
+        ('scan_interval_seconds', '60', 'int'),
+        ('watchlist', 'AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,AMD,CRM,NFLX,ADBE,AVGO,COST,PEP,LLY,UNH,V,MA,JPM,HD', 'list'),
+    ]
+    
+    for param_key, param_value, data_type in params:
+        cursor.execute(
+            """INSERT INTO strategy_parameters (strategy_id, param_key, param_value, data_type)
+               VALUES (%s, %s, %s, %s)""",
+            (strategy_id, param_key, param_value, data_type)
+        )
+    
+    logger.info("Insertados %d parámetros por defecto para estrategia %s", len(params), strategy_id)
 
 
 def _verify_bot_ownership(db: Database, bot_id: str, user_id: str):
