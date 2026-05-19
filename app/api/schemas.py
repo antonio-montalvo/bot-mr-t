@@ -87,29 +87,57 @@ class AccountResponse(BaseModel):
 
 
 # ── Strategy ─────────────────────────────────────
-class StrategyCreate(BaseModel):
+class StrategyCreateRequest(BaseModel):
+    bot_id: str
     name: str
-    description: Optional[str] = None
-    type: str  # e.g. "mean_reversion", "momentum"
-    parameters: Optional[dict] = None
+    type: str  # e.g. "hybrid_squeeze_momentum"
+    description: str
 
 
-class StrategyUpdate(BaseModel):
+class StrategyUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     type: Optional[str] = None
-    parameters: Optional[dict] = None
+
+
+class StrategyParameterResponse(BaseModel):
+    id: str
+    strategy_id: str
+    param_key: str
+    param_value: str
+    data_type: str
+    created_at: Optional[datetime] = None
 
 
 class StrategyResponse(BaseModel):
-    id: int
+    id: str
+    bot_id: str
     name: str
-    description: Optional[str] = None
+    description: str
     type: str
-    parameters: Optional[dict] = None
     is_active: bool = False
     created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+
+
+class StrategyWithParametersResponse(BaseModel):
+    id: str
+    bot_id: str
+    name: str
+    description: str
+    type: str
+    is_active: bool = False
+    created_at: Optional[datetime] = None
+    parameters: list[StrategyParameterResponse] = []
+
+
+class StrategyParameterCreateRequest(BaseModel):
+    param_key: str
+    param_value: str
+    data_type: str  # "int", "float", "str", "bool", "list"
+
+
+class StrategyParameterUpdateRequest(BaseModel):
+    param_value: str
 
 
 # ── Bot ──────────────────────────────────────────
